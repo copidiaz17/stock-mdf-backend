@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
-const SECRET = "mi_secreto_para_jwt"; 
+const SECRET = process.env.JWT_SECRET; 
 
 // POST /auth/login
 router.post("/login", async (req, res) => {
