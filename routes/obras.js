@@ -318,7 +318,7 @@ router.post(
 router.delete(
   "/:id",
   authMiddleware,
-  hasRole([ROLES.ADMIN]),
+  hasRole([ROLES.ADMIN, ROLES.OPERATOR]),
   async (req, res) => {
     try {
       const obraId = req.params.id;
