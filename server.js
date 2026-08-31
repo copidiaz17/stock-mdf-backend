@@ -2,24 +2,21 @@
 import express from "express";
 import cors from "cors";
 
-import { sequelize } from "./database.js"; 
+import { sequelize } from "./database.js";
 
-import "./models/Usuario.js"; 
-import "./models/Obra.js";  
+import "./models/Usuario.js";
+import "./models/Obra.js";
 import "./models/Material.js";
 import "./models/MaterialObra.js";
-import "./models/ItemObra.js"; 
-import "./models/MovimientoMaterial.js"; 
+import "./models/ItemObra.js";
+import "./models/MovimientoMaterial.js";
 
-import "./models/associations.js"; 
+import "./models/associations.js";
 
 import authRoutes from "./routes/auth.js";
 import obrasRoutes from "./routes/obras.js";
 import materialesRoutes from "./routes/materiales.js";
 import usuariosRoutes from "./routes/usuarios.js";
-
-
-
 
 const app = express();
 
@@ -73,6 +70,7 @@ console.log("   DB_HOST:", process.env.DB_HOST || "(no definido)");
 console.log("   DB_PORT:", process.env.DB_PORT || "(no definido)");
 console.log("   DB_NAME:", process.env.DB_NAME || "(no definido)");
 console.log("   DB_USER:", process.env.DB_USER || "(no definido)");
+console.log("   DB_SSL:", process.env.DB_SSL ?? "(no definido, se usa SSL)");
 console.log("   DB_PASSWORD:", process.env.DB_PASSWORD ? "✅ definido" : "❌ NO definido");
 console.log("   JWT_SECRET:", process.env.JWT_SECRET ? "✅ definido" : "❌ NO definido");
 console.log("   FRONTEND_URL:", process.env.FRONTEND_URL || "(no definido)");
@@ -82,15 +80,25 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+/*
+  El sync() quedó apagado por defecto. Las tablas ya existen en
+  producción, así que correrlo en cada arranque toca el esquema sin
+  necesidad. Si alguna vez hace falta crear tablas nuevas, se levanta
+  una vez con DB_SYNC=true y se vuelve a apagar.
+*/
+const debeSincronizar = String(process.env.DB_SYNC || "false").toLowerCase() === "true";
+
 console.log("🔄 Intentando conectar a la base de datos...");
 
 sequelize.authenticate()
   .then(() => {
     console.log("✅ Conexión a DB correcta");
+    if (!debeSincronizar) return null;
+    console.log("⚠️  DB_SYNC=true: sincronizando modelos con la base...");
     return sequelize.sync();
   })
   .then(() => {
-    console.log("✅ Tablas sincronizadas");
+    if (debeSincronizar) console.log("✅ Tablas sincronizadas");
     app.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en puerto ${PORT}`);
     });
