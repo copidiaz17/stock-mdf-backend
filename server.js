@@ -10,12 +10,17 @@ import "./models/Material.js";
 import "./models/MaterialObra.js";
 import "./models/ItemObra.js";
 import "./models/MovimientoMaterial.js";
+import "./models/Maquina.js";
+import "./models/MovimientoMaquina.js";
 
 import "./models/associations.js";
 
 import authRoutes from "./routes/auth.js";
 import obrasRoutes from "./routes/obras.js";
+import herramientasRoutes from "./routes/herramientas.js";
 import materialesRoutes from "./routes/materiales.js";
+import maquinasRoutes from "./routes/maquinas.js";
+import catalogoRoutes from "./routes/catalogo.js";
 import usuariosRoutes from "./routes/usuarios.js";
 
 const app = express();
@@ -49,7 +54,10 @@ app.use(cors({
 
 app.use("/auth", authRoutes);
 app.use("/materiales", materialesRoutes);
+app.use("/obras/:obraId/herramientas", herramientasRoutes);
 app.use("/obras", obrasRoutes);
+app.use("/maquinas", maquinasRoutes);
+app.use("/catalogo", catalogoRoutes);
 app.use("/usuarios", usuariosRoutes);
 
 

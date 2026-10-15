@@ -4,8 +4,10 @@
   import MaterialObra from "../models/MaterialObra.js";
   import MovimientoMaterial from "../models/MovimientoMaterial.js";
   import ItemObra from "../models/ItemObra.js";
+  import Maquina from "../models/Maquina.js";
   import { Op } from "sequelize";
   import { sequelize } from "../database.js";
+  import { esFechaValida, fechaDelMovimiento } from "../lib/fechas.js";
 
   import { authMiddleware } from "./auth.js";
 
@@ -13,27 +15,24 @@
 
   const router = express.Router();
 
+  // Las herramientas usan el mismo saldo por obra pero se manejan desde
+  // su propia pestaña (routes/herramientas.js): acá sólo materiales.
+  async function materialParaMovimiento(materialId) {
+    const material = await Material.findByPk(materialId);
+    if (!material || material.unificadoEnId) {
+      return { error: "El material no existe" };
+    }
+    if (material.clase !== "material") {
+      return {
+        error: `"${material.nombre}" es una herramienta o máquina: se maneja desde Herramientas y maquinarias`,
+      };
+    }
+    return { material };
+  }
+
   /* ================================================
     HELPERS DE FECHA
     ================================================ */
-
-  const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-
-  // Hoy en horario de Argentina (Render corre en UTC, así que no
-  // podemos usar toISOString() a secas: después de las 21 hs daría mañana).
-  function hoyISO() {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Argentina/Buenos_Aires",
-    }).format(new Date());
-  }
-
-  function esFechaValida(valor) {
-    return (
-      typeof valor === "string" &&
-      RE_FECHA.test(valor) &&
-      !Number.isNaN(Date.parse(`${valor}T00:00:00Z`))
-    );
-  }
 
   /*
     Fecha "real" del movimiento con fallback al alta.
@@ -74,21 +73,6 @@
     }
 
     return { condiciones };
-  }
-
-  // Valida la fecha que manda el formulario de ingreso/salida.
-  // Devuelve { fecha } o { error }.
-  function fechaDelMovimiento(valor) {
-    if (valor === undefined || valor === null || valor === "") {
-      return { fecha: hoyISO() };
-    }
-    if (!esFechaValida(valor)) {
-      return { error: "La fecha del movimiento debe tener formato AAAA-MM-DD" };
-    }
-    if (valor > hoyISO()) {
-      return { error: "La fecha del movimiento no puede ser futura" };
-    }
-    return { fecha: valor };
   }
 
   /* ================================================
@@ -176,6 +160,8 @@
             {
               model: Material,
               attributes: ["id", "nombre", "unidad"],
+              where: { clase: "material", unificadoEnId: null },
+              required: true,
             },
           ],
         });
@@ -219,6 +205,9 @@
             .status(400)
             .json({ message: "materialId y cantidad son obligatorios" });
         }
+
+        const deMaterial = await materialParaMovimiento(materialId);
+        if (deMaterial.error) return res.status(400).json({ message: deMaterial.error });
 
         const { fecha, error } = fechaDelMovimiento(req.body.fechaMovimiento);
         if (error) return res.status(400).json({ message: error });
@@ -273,6 +262,9 @@
             .status(400)
             .json({ message: "materialId y cantidad son obligatorios" });
         }
+
+        const deMaterial = await materialParaMovimiento(materialId);
+        if (deMaterial.error) return res.status(400).json({ message: deMaterial.error });
 
         // La salida se imputa siempre a un ítem de obra: sin eso no hay
         // forma de saber a qué partida se consumió el material.
@@ -373,13 +365,19 @@
         if (rango.error) return res.status(400).json({ message: rango.error });
         condiciones.push(...rango.condiciones);
 
+        // Las herramientas tienen su propio historial (routes/herramientas.js).
         const { count, rows } = await MovimientoMaterial.findAndCountAll({
           where: { [Op.and]: condiciones },
           attributes: {
             include: [[fechaEfectiva(), "fechaEfectiva"]],
           },
           include: [
-            { model: Material, attributes: ["id", "nombre", "unidad"] },
+            {
+              model: Material,
+              attributes: ["id", "nombre", "unidad"],
+              where: { clase: "material" },
+              required: true,
+            },
             {
               model: ItemObra,
               attributes: ["id", "nombre", "codigo"],
@@ -455,7 +453,13 @@
             [sequelize.fn("MAX", fechaEfectiva()), "ultimoMovimiento"],
           ],
           include: [
-            { model: Material, attributes: ["nombre", "unidad"] },
+            // Sólo materiales: una herramienta no se "consume" en un ítem.
+            {
+              model: Material,
+              attributes: ["nombre", "unidad"],
+              where: { clase: "material" },
+              required: true,
+            },
             {
               model: ItemObra,
               attributes: ["nombre", "codigo"],
@@ -617,6 +621,17 @@ router.delete(
       const obraId = req.params.id;
 
       console.log("🗑 Eliminando obra ID:", obraId);
+
+      // Las máquinas no tienen depósito: si la obra se borra con máquinas
+      // adentro, quedarían sin lugar. Primero hay que trasladarlas.
+      const maquinas = await Maquina.count({
+        where: { obraId, estado: { [Op.ne]: "baja" } },
+      });
+      if (maquinas) {
+        return res.status(400).json({
+          message: `La obra tiene ${maquinas} máquina(s). Trasladalas a otra obra antes de eliminarla.`,
+        });
+      }
 
       // 1️⃣ Eliminar movimientos
       await MovimientoMaterial.destroy({ where: { obraId } });

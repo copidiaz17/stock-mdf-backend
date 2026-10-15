@@ -2,10 +2,13 @@
 
 import { sequelize, DataTypes } from "../database.js";
 
-
-// Asume que también debes importar Material y ItemObra para definir las asociaciones aquí
-// import Material from './Material.js'; 
-// import ItemObra from './ItemObra.js'; 
+/*
+  Tipos de movimiento:
+  - ingreso / salida:                 materiales (la salida se imputa a un ítem)
+  - ingreso / traslado_salida /
+    traslado_ingreso / baja:          herramientas por cantidad
+*/
+export const TIPOS = ["ingreso", "salida", "traslado_salida", "traslado_ingreso", "baja"];
 
 const MovimientoMaterial = sequelize.define('MovimientoMaterial', {
     id: {
@@ -25,7 +28,7 @@ const MovimientoMaterial = sequelize.define('MovimientoMaterial', {
         type: DataTypes.INTEGER,
         allowNull: false
     },
-    tipo: { // 'ingreso' o 'egreso'
+    tipo: {
         type: DataTypes.STRING,
         allowNull: false
     },
@@ -34,15 +37,35 @@ const MovimientoMaterial = sequelize.define('MovimientoMaterial', {
         allowNull: true
     },
     // <<-- CAMPO PARA CONTROL DE COSTOS -->>
-    itemObraId: { 
+    itemObraId: {
         type: DataTypes.INTEGER,
-        allowNull: true, 
+        allowNull: true,
     },
     // <<-- CAMPO PARA FECHAS HISTÓRICAS -->>
-    fechaMovimiento: { 
-        type: DataTypes.DATEONLY, 
+    fechaMovimiento: {
+        type: DataTypes.DATEONLY,
         allowNull: true,
-        defaultValue: DataTypes.NOW 
+        defaultValue: DataTypes.NOW
+    },
+    // Quién lo cargó (la columna existía pero nunca se llenaba).
+    usuarioId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    // En un traslado de herramientas: la otra obra (destino u origen).
+    obraRelacionadaId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
+    // En una baja: rota / perdida / robada / otro.
+    motivo: {
+        type: DataTypes.STRING(30),
+        allowNull: true
+    },
+    // Si el material se unificó con otro, con qué material se cargó originalmente.
+    materialOriginalId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     }
     // NOTA: Sequelize ya agrega createdAt y updatedAt
 },
@@ -52,9 +75,5 @@ const MovimientoMaterial = sequelize.define('MovimientoMaterial', {
 }
 
 );
-
-// Ejemplo conceptual de asociaciones (Asegúrate de tenerlas definidas en tu código real)
-// MovimientoMaterial.belongsTo(ItemObra, { foreignKey: 'itemObraId' });
-// MovimientoMaterial.belongsTo(Material, { foreignKey: 'materialId' }); 
 
 export default MovimientoMaterial;
